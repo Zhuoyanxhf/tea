@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#2e3b2e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>泡茶助手</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:#f7f4ee; color:#333; min-height:100vh; display:flex; flex-direction:column; max-width:520px; margin:0 auto; }
+  header { background:#2e3b2e; color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10; }
+  header h1 { font-size:17px; font-weight:600; letter-spacing:2px; }
+  .hdr-btns { display:flex; gap:8px; }
+  .hdr-btns button { background:rgba(255,255,255,.15); color:#fff; border:none; border-radius:14px; padding:6px 12px; font-size:12px; cursor:pointer; }
+  #timerZone { display:none; padding:24px 16px; text-align:center; background:linear-gradient(180deg,#2e3b2e,#3d4f3d); color:#fff; }
+  #teaName { font-size:18px; opacity:.9; }
+  #steepInfo { font-size:14px; margin-top:6px; color:#cfe0cf; }
+  #countdown { font-size:84px; font-weight:200; font-variant-numeric:tabular-nums; margin:8px 0; }
+  #progressBar { width:100%; height:6px; background:rgba(255,255,255,.15); border-radius:3px; overflow:hidden; margin:10px 0 14px; }
+  #progressFill { height:100%; width:100%; background:#d4b483; border-radius:3px; transition:width .2s linear; }
+  #bigAction { width:200px; padding:14px 0; font-size:17px; border:none; border-radius:30px; background:#d4b483; color:#2e3b2e; font-weight:600; cursor:pointer; }
+  #cancelBtn { margin-top:10px; background:none; border:none; color:#9fb59f; font-size:13px; cursor:pointer; text-decoration:underline; }
+  #steepNav { margin-top:14px; display:flex; justify-content:center; gap:10px; align-items:center; }
+  #steepNav button { background:rgba(255,255,255,.12); color:#fff; border:none; border-radius:18px; padding:6px 16px; font-size:14px; cursor:pointer; }
+  #steepNav .lbl { font-size:12px; color:#9fb59f; }
+  #teaGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; padding:16px; }
+  .teaBtn { aspect-ratio:1; border:none; border-radius:50%; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.08); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:6px; position:relative; }
+  .teaBtn:active { transform:scale(.95); }
+  .teaBtn .name { font-size:13.5px; font-weight:600; color:#2e3b2e; }
+  .teaBtn .meta { font-size:10.5px; color:#999; line-height:1.3; }
+  .teaBtn .del { position:absolute; top:-2px; right:-2px; width:22px; height:22px; border-radius:50%; background:#c0392b; color:#fff; font-size:12px; border:none; display:none; }
+  .teaBtn .chk { position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%; border:2px solid #bbb; background:#fff; display:none; }
+  body.editMode .teaBtn .del { display:block; }
+  body.batchMode .teaBtn .chk { display:block; }
+  body.batchMode .teaBtn.sel { outline:3px solid #d4a03d; outline-offset:2px; }
+  body.batchMode .teaBtn.sel .chk { background:#d4a03d; border-color:#d4a03d; }
+  #batchBar { display:none; position:sticky; bottom:0; background:#2e3b2e; color:#fff; padding:12px 16px; gap:10px; align-items:center; }
+  body.batchMode #batchBar { display:flex; }
+  #batchBar .cnt { flex:1; font-size:14px; }
+  #batchBar button { padding:10px 20px; border:none; border-radius:10px; font-size:14px; cursor:pointer; }
+  #batchDel { background:#c0392b; color:#fff; }
+  #batchCancel { background:rgba(255,255,255,.15); color:#fff; }
+  #noteBar { margin:0 16px 16px; background:#fff8e7; border-left:4px solid #d4b483; border-radius:6px; padding:10px 12px; font-size:12.5px; color:#7a6a4f; display:none; line-height:1.6; }
+  footer { display:flex; gap:10px; padding:12px 16px 24px; }
+  footer button { flex:1; padding:12px 0; border:1px solid #ccc; background:#fff; border-radius:10px; font-size:14px; color:#555; cursor:pointer; }
+  .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:flex-end; }
+  .modal.open { display:flex; }
+  .sheet { background:#fff; width:100%; max-height:85vh; border-radius:16px 16px 0 0; padding:16px; overflow-y:auto; }
+  .sheet h2 { font-size:16px; margin-bottom:10px; }
+  .sheet textarea { width:100%; height:200px; font-family:monospace; font-size:11px; border:1px solid #ddd; border-radius:8px; padding:8px; }
+  .sheet .row { display:flex; gap:10px; margin-top:12px; }
+  .sheet .row button { flex:1; padding:12px 0; border:none; border-radius:10px; font-size:15px; cursor:pointer; }
+  #doImport { background:#2e3b2e; color:#fff; }
+  #closeSheet { background:#eee; color:#555; }
+  .hint { font-size:11px; color:#999; margin-top:8px; line-height:1.6; }
+  /* 编辑表单 */
+  .form { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .form .full { grid-column:1/3; }
+  .form label { font-size:12px; color:#777; display:block; margin-bottom:3px; }
+  .form input { width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:15px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍵 泡茶助手</h1>
+  <div class="hdr-btns">
+    <button id="silentBtn">🔔 响铃</button>
+  </div>
+</header>
+
+<div id="timerZone">
+  <div id="teaName"></div>
+  <div id="steepInfo"></div>
+  <div id="countdown">--</div>
+  <div id="progressBar"><div id="progressFill"></div></div>
+  <button id="bigAction">开始</button>
+  <div id="steepNav">
+    <button id="prevSteep">← 上一泡</button>
+    <span class="lbl">手动调整</span>
+    <button id="nextSteep">下一泡 →</button>
+  </div>
+  <div><button id="cancelBtn">结束本次冲泡</button></div>
+</div>
+
+<div id="noteBar"></div>
+<div id="teaGrid"></div>
+
+<div id="batchBar">
+  <span class="cnt" id="batchCnt">已选 0 款</span>
+  <button id="batchCancel">取消</button>
+  <button id="batchDel">删除所选</button>
+</div>
+
+<footer>
+  <button id="importBtn">📥 批量导入</button>
+  <button id="exportBtn">📤 导出备份</button>
+  <button id="batchModeBtn">🗑️ 批量管理</button>
+</footer>
+
+<div class="modal" id="importModal">
+  <div class="sheet">
+    <h2>批量导入茶叶（JSON格式）</h2>
+    <textarea id="importText" placeholder='[{"name":"茶名","temp":95,"steeps":[15,15,20,30],"note":"提示"}]'></textarea>
+    <div class="hint">字段：name 茶名（必填）；temp 水温；steeps 每泡秒数数组（必填）；note 小贴士；grams 投茶量；water 注水量(ml)；wash 洗茶秒数。</div>
+    <div class="row">
+      <button id="closeSheet">取消</button>
+      <button id="doImport">导入</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="editModal">
+  <div class="sheet">
+    <h2 id="editTitle">编辑茶叶</h2>
+    <div class="form">
+      <div class="full"><label>茶名</label><input id="fName"></div>
+      <div><label>水温 (°C)</label><input id="fTemp" type="number"></div>
+      <div><label>洗茶 (秒)</label><input id="fWash" type="number"></div>
+      <div><label>投茶量</label><input id="fGrams" placeholder="如 3g"></div>
+      <div><label>注水量 (ml)</label><input id="fWater" type="number"></div>
+      <div class="full"><label>每泡秒数（逗号分隔，第1泡开始）</label><input id="fSteeps" placeholder="如 10,10,15,20,30"></div>
+      <div class="full"><label>小贴士</label><input id="fNote"></div>
+    </div>
+    <div class="row">
+      <button id="editCancel">取消</button>
+      <button id="editSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BUILTIN = [
+ {name:"鸭屎香",temp:100,wash:3,steeps:[12,12,18,25,35,50],grams:"4g",water:200,note:"100°C沸水，秒出汤，出汤务必倒干净。"},
+ {name:"铁观音",temp:100,wash:3,steeps:[30,12,12,18,25,35],grams:"4g",water:200,note:"忌久闷，闷则苦涩压香。"},
+ {name:"大红袍",temp:100,wash:3,steeps:[18,12,18,25,35,50],grams:"4g",water:200,note:"岩茶耐泡，可冲8泡以上。"},
+ {name:"凤凰单丛",temp:100,wash:3,steeps:[12,12,18,25,35,50],grams:"4g",water:200,note:"高香茶，沸水逼香，快进快出。"},
+ {name:"冻顶乌龙",temp:95,wash:3,steeps:[25,18,25,30,40,55],grams:"4g",water:200,note:"球型乌龙，前两泡稍久让茶叶舒展。"},
+ {name:"滇红",temp:95,wash:0,steeps:[20,18,25,30,40,55],grams:"3g",water:200,note:"滋味浓强，可做奶茶。"},
+ {name:"祁门红茶",temp:90,wash:0,steeps:[25,18,25,30,40,55],grams:"3g",water:200,note:"清饮佳，勿久浸防酸。"},
+ {name:"金骏眉",temp:85,wash:0,steeps:[25,25,30,35,45,65],grams:"2.5g",water:200,note:"芽头细嫩，水温勿高。"},
+ {name:"正山小种",temp:95,wash:0,steeps:[25,18,25,30,40,55],grams:"3g",water:200,note:"带松烟香，建议清饮。"},
+ {name:"英红九号",temp:92,wash:0,steeps:[22,18,18,25,35,50],grams:"3g",water:200,note:"浓强型红茶，可做奶茶，勿久浸。"},
+ {name:"白毫银针",temp:88,wash:0,steeps:[60,35,35,45,55,75],grams:"3g",water:200,note:"85-90°C，白毫是精华别洗掉，析出慢。"},
+ {name:"白牡丹",temp:88,wash:3,steeps:[45,30,35,45,55,75],grams:"3g",water:200,note:"花香清雅，水温勿高。"},
+ {name:"白牡丹方饼",temp:95,wash:10,steeps:[55,30,30,40,50,70,95],grams:"1片5g泡500ml",water:500,note:"整片投入勿掰碎；200ml杯则取半片3g、时间不变。"},
+ {name:"老白茶",temp:100,wash:3,steeps:[35,20,25,35,45,65],grams:"4g",water:200,note:"变淡后叶底可喷淋煮3-5分钟。"},
+ {name:"老白茶饼·2019牡丹",temp:100,wash:10,steeps:[35,25,30,40,50,70],grams:"4g",water:200,note:"泡5泡后叶底进小米壶，喷淋500ml煮3分钟，可复淋2-3次。"},
+ {name:"西湖龙井",temp:85,wash:0,steeps:[35,25,35,45,65,95],grams:"2.5g",water:200,note:"水温勿高保鲜爽。"},
+ {name:"碧螺春",temp:80,wash:0,steeps:[45,35,45,65,95,125],grams:"2.5g",water:200,note:"先注水后投茶，毫多是精华。"},
+ {name:"黄山毛峰",temp:85,wash:0,steeps:[35,30,40,50,65,95],grams:"3g",water:200,note:"清香型绿茶，续水留三分之一。"},
+ {name:"茉莉花茶",temp:85,wash:0,steeps:[30,25,30,40,50,65],grams:"3g",water:200,note:"花香茶，水温高则苦涩。"},
+ {name:"普洱生茶",temp:100,wash:5,steeps:[18,12,18,25,35,50],grams:"4g",water:200,note:"新生茶水温可降至95°C。"},
+ {name:"普洱熟茶",temp:100,wash:5,steeps:[25,18,25,30,40,55],grams:"4g",water:200,note:"新茶有堆味属正常，洗茶可洗两遍。"},
+ {name:"揭阳炒茶",temp:90,wash:0,steeps:[30,20,25,35,45,65],grams:"3.5g",water:200,note:"先苦后甘是其特色，耐泡耐放。"},
+ {name:"六堡茶",temp:100,wash:5,steeps:[25,18,25,30,40,55],grams:"4g",water:200,note:"黑茶温润，可煮饮。"}
+];
+
+const STORE_KEY = "myTeas_v2";
+let teas = (function(){
+  const cur = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+  if(cur) return cur;
+  const nb = BUILTIN.slice();
+  const old = JSON.parse(localStorage.getItem("myTeas") || "null");
+  if(Array.isArray(old)){ old.forEach(t=>{ if(t.name && Array.isArray(t.steeps) && !nb.some(x=>x.name===t.name)) nb.push(t); }); }
+  localStorage.setItem(STORE_KEY, JSON.stringify(nb));
+  return nb;
+})();
+let cur = null;
+let remain = 0, total = 0, timerId = null, running = false, wakeLock = null;
+let silent = localStorage.getItem("silent") === "1";
+let batchSel = new Set();
+let editIdx = -1;
+
+const $ = id => document.getElementById(id);
+$("silentBtn").textContent = silent ? "🔕 静音" : "🔔 响铃";
+
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(teas)); }
+function saveSession(){ if(cur){ localStorage.setItem("session", JSON.stringify({name:cur.name, steepIdx:cur.steepIdx})); } else { localStorage.removeItem("session"); } }
+function gramsWater(t){ return (t.temp||"")+"°C"+(t.grams?" · "+t.grams:"")+(t.water?" · "+t.water+"ml":""); }
+
+function render(){
+  const g = $("teaGrid"); g.innerHTML = "";
+  teas.forEach((t,i)=>{
+    const b = document.createElement("button");
+    b.className = "teaBtn" + (batchSel.has(i) ? " sel" : "");
+    b.innerHTML = `<span class="name">${t.name}</span>
+      <span class="meta">${gramsWater(t)}<br>第1泡 ${t.steeps[0]}秒</span>
+      <span class="del">×</span><span class="chk"></span>`;
+    b.querySelector(".del").onclick = e => { e.stopPropagation(); if(confirm("删除「"+t.name+"」？")){ teas.splice(i,1); save(); render(); } };
+    b.onclick = ()=>{
+      if(document.body.classList.contains("batchMode")){
+        batchSel.has(i) ? batchSel.delete(i) : batchSel.add(i);
+        b.classList.toggle("sel"); updateBatchCnt(); return;
+      }
+      selectTea(t);
+    };
+    /* 长按 或 双击 进入编辑 */
+    let lp = null, suppress = false;
+    b.addEventListener("pointerdown", ()=>{
+      lp = setTimeout(()=>{ lp = null; suppress = true; openEdit(i); }, 550);
+    });
+    b.addEventListener("pointerup", ()=>{ if(lp) clearTimeout(lp); });
+    b.addEventListener("pointerleave", ()=>{ if(lp) clearTimeout(lp); });
+    b.addEventListener("pointercancel", ()=>{ if(lp) clearTimeout(lp); });
+    b.addEventListener("dblclick", ()=>{ suppress = true; openEdit(i); });
+    b.addEventListener("click", e=>{ if(suppress){ suppress = false; e.stopPropagation(); e.preventDefault(); } }, true);
+    g.appendChild(b);
+  });
+  updateBatchCnt();
+}
+function updateBatchCnt(){ $("batchCnt").textContent = "已选 " + batchSel.size + " 款"; }
+
+/* ===== 编辑 ===== */
+function openEdit(i){
+  editIdx = i;
+  const t = teas[i];
+  $("editTitle").textContent = "编辑 · " + t.name;
+  $("fName").value = t.name;
+  $("fTemp").value = t.temp || "";
+  $("fWash").value = t.wash || 0;
+  $("fGrams").value = t.grams || "";
+  $("fWater").value = t.water || "";
+  $("fSteeps").value = (t.steeps||[]).join(",");
+  $("fNote").value = t.note || "";
+  $("editModal").classList.add("open");
+}
+$("editCancel").onclick = ()=> $("editModal").classList.remove("open");
+$("editSave").onclick = ()=>{
+  const name = $("fName").value.trim();
+  const steeps = $("fSteeps").value.split(/[,，、\s]+/).filter(Boolean).map(Number).filter(n=>n>0);
+  if(!name || !steeps.length){ alert("茶名和每泡秒数必填"); return; }
+  teas[editIdx] = {
+    name,
+    temp: Number($("fTemp").value) || 95,
+    wash: Number($("fWash").value) || 0,
+    grams: $("fGrams").value.trim(),
+    water: Number($("fWater").value) || 0,
+    steeps,
+    note: $("fNote").value.trim()
+  };
+  save(); render();
+  if(cur && cur.name === teas[editIdx].name){ /* 若正在泡此茶，同步更新 */ }
+  $("editModal").classList.remove("open");
+  alert("已保存");
+};
+
+function selectTea(t, steepIdx){
+  cur = {...t, steepIdx: (steepIdx !== undefined ? steepIdx : (t.wash ? -1 : 0))};
+  $("timerZone").style.display = "block";
+  $("noteBar").style.display = "block";
+  $("noteBar").textContent = "💡 " + (t.note || "");
+  $("teaName").textContent = t.name;
+  $("steepInfo").textContent = gramsWater(t);
+  running = false; stopTimer();
+  updateAction(); saveSession();
+  window.scrollTo(0,0); requestWake();
+}
+function curLabel(){
+  if(cur.steepIdx === -1) return `洗茶 · ${cur.wash}秒（按下去立刻倒掉）`;
+  return `第 ${cur.steepIdx+1} 泡 / 共 ${cur.steeps.length} 泡`;
+}
+function updateAction(){
+  const t = cur.steepIdx === -1 ? cur.wash : cur.steeps[cur.steepIdx];
+  $("countdown").textContent = t + "″";
+  $("bigAction").textContent = running ? "计时中…点此处出汤" : (cur.steepIdx === -1 ? "开始洗茶" : `开始第 ${cur.steepIdx+1} 泡`);
+  $("progressFill").style.width = "100%";
+  /* 泡数显示并入第二行 */
+  $("steepInfo").textContent = gramsWater(cur) + "　" + curLabel();
+}
+function mainAction(){
+  if(!running){ total = remain = (cur.steepIdx === -1 ? cur.wash : cur.steeps[cur.steepIdx]); startTimer(); }
+  else { stopTimer(); finish(true); }
+}
+$("bigAction").onclick = mainAction;
+$("cancelBtn").onclick = ()=>{ stopTimer(); running=false; cur=null; saveSession(); $("timerZone").style.display="none"; $("noteBar").style.display="none"; };
+
+function startTimer(){
+  running = true;
+  $("bigAction").textContent = "计时中…点此处出汤";
+  const t0 = Date.now();
+  timerId = setInterval(()=>{
+    remain = total - Math.floor((Date.now()-t0)/1000);
+    if(remain <= 0){ stopTimer(); finish(false); return; }
+    $("countdown").textContent = remain + "″";
+    $("progressFill").style.width = (remain/total*100) + "%";
+  }, 200);
+}
+function stopTimer(){ clearInterval(timerId); timerId = null; }
+
+function finish(manual){
+  running = false;
+  if(!silent){ beep(); }
+  if(navigator.vibrate) navigator.vibrate([300,150,300,150,500]);
+  if(cur.steepIdx === -1){ cur.steepIdx = 0; }
+  else { cur.steepIdx++; }
+  if(cur.steepIdx >= cur.steeps.length){
+    $("steepInfo").textContent = gramsWater(cur) + "　✅ 全部泡完，换茶吧";
+    $("countdown").textContent = "完";
+    $("bigAction").textContent = "重新开始";
+    $("bigAction").onclick = ()=>{ cur.steepIdx = cur.wash ? -1 : 0; $("bigAction").onclick = mainAction; updateAction(); saveSession(); };
+    return;
+  }
+  updateAction(); saveSession();
+}
+
+function adjustSteep(d){
+  if(!cur) return;
+  const lo = cur.wash ? -1 : 0;
+  let idx = cur.steepIdx + d;
+  if(idx > cur.steeps.length - 1) idx = cur.steeps.length - 1;
+  if(idx < lo) idx = lo;
+  cur.steepIdx = idx;
+  stopTimer(); running = false;
+  $("bigAction").onclick = mainAction;
+  updateAction(); saveSession();
+}
+$("prevSteep").onclick = ()=>adjustSteep(-1);
+$("nextSteep").onclick = ()=>adjustSteep(1);
+
+function beep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    [0,0.35,0.7].forEach(d=>{
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880; o.type = "sine";
+      g.gain.setValueAtTime(0.4, ctx.currentTime + d);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d + 0.3);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.35);
+    });
+  }catch(e){}
+}
+
+$("silentBtn").onclick = ()=>{
+  silent = !silent;
+  localStorage.setItem("silent", silent ? "1" : "0");
+  $("silentBtn").textContent = silent ? "🔕 静音" : "🔔 响铃";
+};
+
+async function requestWake(){
+  try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){}
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && cur) requestWake(); });
+
+$("importBtn").onclick = ()=>{ $("importModal").classList.add("open"); };
+$("closeSheet").onclick = ()=> $("importModal").classList.remove("open");
+$("doImport").onclick = ()=>{
+  try{
+    const arr = JSON.parse($("importText").value);
+    if(!Array.isArray(arr)) throw 0;
+    let n = 0;
+    arr.forEach(t=>{
+      if(t.name && Array.isArray(t.steeps) && t.steeps.length){
+        teas.push({name:t.name, temp:t.temp||95, wash:t.wash||0, steeps:t.steeps.map(Number), note:t.note||"", grams:t.grams||"", water:t.water||200});
+        n++;
+      }
+    });
+    save(); render(); $("importModal").classList.remove("open");
+    alert("成功导入 " + n + " 款茶");
+  }catch(e){ alert("格式错误，请检查JSON"); }
+};
+$("exportBtn").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(teas,null,1)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "我的茶库备份.json"; a.click();
+};
+
+let batchMode = false;
+$("batchModeBtn").onclick = ()=>{
+  batchMode = !batchMode;
+  document.body.classList.toggle("batchMode", batchMode);
+  $("batchModeBtn").textContent = batchMode ? "✅ 退出管理" : "🗑️ 批量管理";
+  if(!batchMode){ batchSel.clear(); render(); }
+};
+$("batchCancel").onclick = ()=>{ batchMode=false; document.body.classList.remove("batchMode"); $("batchModeBtn").textContent="🗑️ 批量管理"; batchSel.clear(); render(); };
+$("batchDel").onclick = ()=>{
+  if(batchSel.size === 0){ alert("请先点选要删除的茶"); return; }
+  if(!confirm("确认删除所选 " + batchSel.size + " 款茶？")) return;
+  teas = teas.filter((_,i)=>!batchSel.has(i));
+  batchSel.clear(); save(); render();
+};
+
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+render();
+
+(function restore(){
+  try{
+    const s = JSON.parse(localStorage.getItem("session") || "null");
+    if(!s) return;
+    const t = teas.find(x=>x.name === s.name);
+    if(!t) return;
+    selectTea(t, s.steepIdx);
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
